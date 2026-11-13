@@ -1,0 +1,49 @@
+plugins {
+    id 'com.android.application'
+}
+
+// CI passes -PversionCode=<run number> so each build can install over the previous one.
+def vc = project.hasProperty('versionCode') ? project.property('versionCode').toString().toInteger() : 1
+
+android {
+    namespace 'com.sidmaxwell.darkoverlay'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.sidmaxwell.darkoverlay'
+        minSdk 26
+        targetSdk 34
+        versionCode vc
+        versionName "1.${vc}"
+    }
+
+    // A fixed key lives in the repo so every build is signed the same way and updates install cleanly.
+    signingConfigs {
+        release {
+            storeFile file('../keystore/dark-overlay.jks')
+            storePassword 'darkoverlay'
+            keyAlias 'darkoverlay'
+            keyPassword 'darkoverlay'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
