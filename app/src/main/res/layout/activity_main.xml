@@ -71,7 +71,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="28dp"
             android:lineSpacingExtra="4dp"
-            android:text="Tips:\n• While it's on, the notification has Darker / Lighter / Off buttons, so you can adjust without leaving TikTok.\n• Add the "Dark Overlay" tile to your quick settings panel (swipe down → pencil/edit) for one-tap on/off.\n• Touches pass straight through the overlay. Android caps pass-through overlays at 80% darkness."
+            android:text="Tips:\n• While it's on, the notification has Darker / Lighter / Off buttons, so you can adjust without leaving TikTok.\n• Add the 'Dark Overlay' tile to your quick settings panel (swipe down → pencil/edit) for one-tap on/off.\n• Touches pass straight through the overlay. Android caps pass-through overlays at 80% darkness."
             android:textColor="#9AA3B2"
             android:textSize="14sp" />
     </LinearLayout>
