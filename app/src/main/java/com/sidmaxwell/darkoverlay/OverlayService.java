@@ -5,6 +5,8 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -14,7 +16,10 @@ import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.Icon;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.service.quicksettings.TileService;
 import android.util.DisplayMetrics;
@@ -31,12 +36,33 @@ public class OverlayService extends Service
 
     private static final String CHANNEL = "overlay";
     private static final int NOTIF_ID = 1;
+    private static final long POLL_MS = 600;
+
+    private static final int STATUS_DIMMING = 0;
+    private static final int STATUS_WAITING = 1;
+    private static final int STATUS_NEEDS_USAGE = 2;
 
     static volatile boolean running;
 
     private WindowManager wm;
     private View overlay;
     private WindowManager.LayoutParams lp;
+    private boolean shown;
+    private int status = -1;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private UsageStatsManager usm;
+    private PowerManager pm;
+    private String foregroundPkg;
+    private long lastQuery;
+
+    private final Runnable poll = new Runnable() {
+        @Override
+        public void run() {
+            evaluate();
+            if (Prefs.perApp(OverlayService.this)) handler.postDelayed(this, POLL_MS);
+        }
+    };
 
     static void start(Context c) {
         c.startForegroundService(new Intent(c, OverlayService.class));
@@ -63,8 +89,12 @@ public class OverlayService extends Service
         }
 
         running = true;
-        addOverlay();
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        usm = (UsageStatsManager) getSystemService(USAGE_STATS_SERVICE);
+        pm = (PowerManager) getSystemService(POWER_SERVICE);
+        createOverlay();
         Prefs.get(this).registerOnSharedPreferenceChangeListener(this);
+        restartPolling();
         refreshTile();
     }
 
@@ -83,14 +113,9 @@ public class OverlayService extends Service
 
     @Override
     public void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
         Prefs.get(this).unregisterOnSharedPreferenceChangeListener(this);
-        if (overlay != null) {
-            try {
-                wm.removeView(overlay);
-            } catch (Exception ignored) {
-            }
-            overlay = null;
-        }
+        setShown(false);
         running = false;
         refreshTile();
         super.onDestroy();
@@ -103,14 +128,63 @@ public class OverlayService extends Service
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sp, String key) {
-        applySettings();
-        ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
-                .notify(NOTIF_ID, buildNotification());
+        if (lp == null) return;
+        setParams();
+        if (shown) {
+            try {
+                wm.updateViewLayout(overlay, lp);
+            } catch (Exception ignored) {
+            }
+        }
+        if (Prefs.KEY_PER_APP.equals(key)) {
+            restartPolling();
+        } else {
+            evaluate();
+        }
+        notifyStatus();
     }
 
-    private void addOverlay() {
-        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+    private void restartPolling() {
+        handler.removeCallbacks(poll);
+        poll.run();
+    }
 
+    /** Decide whether the overlay should be visible right now. */
+    private void evaluate() {
+        int newStatus;
+        if (!Prefs.perApp(this)) {
+            newStatus = STATUS_DIMMING;
+        } else if (!Prefs.hasUsageAccess(this)) {
+            newStatus = STATUS_NEEDS_USAGE;
+        } else {
+            if (pm.isInteractive()) updateForegroundApp();
+            boolean match = foregroundPkg != null && Prefs.apps(this).contains(foregroundPkg);
+            newStatus = match ? STATUS_DIMMING : STATUS_WAITING;
+        }
+        setShown(newStatus == STATUS_DIMMING);
+        if (newStatus != status) {
+            status = newStatus;
+            notifyStatus();
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void updateForegroundApp() {
+        long now = System.currentTimeMillis();
+        long from = lastQuery == 0 ? now - 60 * 60 * 1000L : lastQuery - 1000;
+        UsageEvents events = usm.queryEvents(from, now);
+        UsageEvents.Event e = new UsageEvents.Event();
+        while (events.hasNextEvent()) {
+            events.getNextEvent(e);
+            // MOVE_TO_FOREGROUND == ACTIVITY_RESUMED (1) on all supported versions.
+            if (e.getEventType() == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                foregroundPkg = e.getPackageName();
+            }
+        }
+        lastQuery = now;
+    }
+
+    private void createOverlay() {
         // Square big enough to cover the screen in either orientation, including bars and cutouts.
         DisplayMetrics dm = new DisplayMetrics();
         wm.getDefaultDisplay().getRealMetrics(dm);
@@ -139,16 +213,18 @@ public class OverlayService extends Service
         overlay.setBackgroundColor(Color.BLACK);
         overlay.setFocusable(false);
         overlay.setClickable(false);
-
         setParams();
-        wm.addView(overlay, lp);
     }
 
-    private void applySettings() {
-        if (overlay == null) return;
-        setParams();
+    private void setShown(boolean show) {
+        if (overlay == null || show == shown) return;
         try {
-            wm.updateViewLayout(overlay, lp);
+            if (show) {
+                wm.addView(overlay, lp);
+            } else {
+                wm.removeView(overlay);
+            }
+            shown = show;
         } catch (Exception ignored) {
         }
     }
@@ -170,14 +246,27 @@ public class OverlayService extends Service
         ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(ch);
     }
 
+    private void notifyStatus() {
+        ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
+                .notify(NOTIF_ID, buildNotification());
+    }
+
     private Notification buildNotification() {
+        String text;
+        if (status == STATUS_NEEDS_USAGE) {
+            text = "Needs Usage access - tap to open settings";
+        } else if (status == STATUS_WAITING) {
+            text = "Darkness " + Prefs.dim(this) + "% - waiting for a chosen app";
+        } else {
+            text = "Darkness " + Prefs.dim(this) + "%";
+        }
         PendingIntent open = PendingIntent.getActivity(this, 0,
                 new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         Icon icon = Icon.createWithResource(this, R.drawable.ic_moon);
         return new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_moon)
                 .setContentTitle("Dark overlay on")
-                .setContentText("Darkness " + Prefs.dim(this) + "%")
+                .setContentText(text)
                 .setContentIntent(open)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)

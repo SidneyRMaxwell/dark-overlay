@@ -23,7 +23,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Step 1: allow Dark Overlay to display over other apps."
+            android:text="Step 1: allow Dark Overlay to display over other apps. If the switch is greyed out: App info, then the 3-dot menu, then Allow restricted settings."
             android:textColor="#FFB4A0"
             android:textSize="15sp" />
 
@@ -66,12 +66,51 @@
             android:text="Also push the screen backlight to minimum (overrides apps that force it brighter, on phones that allow it)"
             android:textColor="#DDDDDD" />
 
+        <Switch
+            android:id="@+id/perApp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="Only darken chosen apps"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp" />
+
+        <Button
+            android:id="@+id/chooseAppsBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Choose apps" />
+
+        <TextView
+            android:id="@+id/usageStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="To know which app is open, Dark Overlay needs Usage access. Tap below, find Dark Overlay and turn it on."
+            android:textColor="#FFB4A0"
+            android:textSize="15sp" />
+
+        <Button
+            android:id="@+id/usageBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Allow usage access" />
+
+        <Button
+            android:id="@+id/permSettingsBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="Permission settings" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="28dp"
             android:lineSpacingExtra="4dp"
-            android:text="Tips:\n• While it\'s on, the notification has Darker / Lighter / Off buttons, so you can adjust without leaving TikTok.\n• Add the Dark Overlay tile to your quick settings panel (swipe down → pencil/edit) for one-tap on/off.\n• Touches pass straight through the overlay. Android caps pass-through overlays at 80% darkness."
+            android:text="Tips:\n• While it\'s on, the notification has Darker / Lighter / Off buttons, so you can adjust without leaving the app.\n• Pull-down tile: swipe down twice, tap the pencil (edit), and drag the Dark Overlay tile into your panel. Tap it for on/off; long-press it to open this screen.\n• Touches pass straight through the overlay. Android caps pass-through overlays at 80% darkness."
             android:textColor="#9AA3B2"
             android:textSize="14sp" />
     </LinearLayout>
